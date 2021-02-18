@@ -14,6 +14,8 @@ class TemporalManager(models.Manager):
         return self.get_queryset().filter(sys_start_date__lte=time, sys_end_date__gt=time)
 
     def add_version(self, temporalModel):
+        if temporalModel.pk:
+            raise RuntimeError("Cannot add an TemporalModel instance with a primary key.")
         txn_now = datetime.now()
         # If accessed via a reverse relation, queryset should have an 'instance' hint with
         # parent of relation

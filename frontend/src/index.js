@@ -13,7 +13,7 @@ const store = RootStore.create({
   },
   {
     gqlHttpClient: createHttpClient(
-  'http://localhost:8000/graphql',
+  'http://localhost:8001/graphql',
 )
   })
 
