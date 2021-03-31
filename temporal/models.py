@@ -3,6 +3,8 @@ from copy import copy
 from datetime import datetime
 
 # Create your models here.
+from django.db.models import Prefetch
+
 
 class TemporalManager(models.Manager):
     use_for_related_fields = True
@@ -85,8 +87,6 @@ class TemporalManager(models.Manager):
             temporalModel.sys_start_date = txn_now
             temporalModel.save()
 
-            FooTimestamp.objects.create(identity=temporalModel.identity, timestamp=txn_now)
-
 
 class TemporalModel(models.Model):
     class Meta:
@@ -109,14 +109,68 @@ class TemporalModel(models.Model):
     #     return self.get_queryset().filter(start_date__lt=end_date, end_date__gt=start_date, identity=self.identity)
 
 
+class FooQuerySet(models.QuerySet):
+    def current(self):
+        return self.prefetch_related(
+            Prefetch(
+                'versions', queryset=FooVersion.temporal.current()
+            ),
+            Prefetch(
+                'bars', queryset=Bar.objects.prefetch_related(
+                    Prefetch(
+                        'baz', queryset=Baz.objects.prefetch_related(
+                            Prefetch(
+                                'versions', queryset=BazVersion.temporal.current()
+                            )
+                        )
+                    )
+                )
+            )
+            # Prefetch(
+            #     'bars__baz__versions',
+            #     queryset=BazVersion.temporal.current(),
+            # )
+        )
+
+
+    def as_of(self, time):
+        return self.prefetch_related(
+            Prefetch(
+                'versions', queryset=FooVersion.temporal.as_of(time)
+            ),
+            Prefetch(
+                'bars', queryset=Bar.objects.prefetch_related(
+                    Prefetch(
+                        'baz', queryset=Baz.objects.prefetch_related(
+                            Prefetch(
+                                'versions', queryset=BazVersion.temporal.as_of(time)
+                            )
+                        )
+                    )
+                )
+            )
+        )
+
+
 class Foo(models.Model):
-    pass
+    objects = models.Manager()
+    optimized = FooQuerySet.as_manager()
 
 
 class FooVersion(TemporalModel):
-    identity = models.ForeignKey(Foo, on_delete=models.PROTECT, related_name="temporal")
+    identity = models.ForeignKey(Foo, on_delete=models.PROTECT, related_name="versions")
     value = models.FloatField(default=0)
 
-class FooTimestamp(models.Model):
-    identity = models.ForeignKey(Foo, on_delete=models.PROTECT, related_name="versions")
-    timestamp = models.DateTimeField(null=False)
+
+class Bar(models.Model):
+    foo = models.ForeignKey(Foo, on_delete=models.PROTECT, related_name="bars")
+    name = models.CharField(max_length=32)
+
+
+class Baz(models.Model):
+    bar = models.ForeignKey(Bar, on_delete=models.PROTECT, related_name="baz")
+
+
+class BazVersion(TemporalModel):
+    identity = models.ForeignKey(Baz, on_delete=models.PROTECT, related_name="versions")
+    value = models.FloatField(default=0)
