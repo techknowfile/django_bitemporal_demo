@@ -2,7 +2,53 @@ from django.db.models import Prefetch
 from django.test import TestCase
 import datetime
 from temporal.models import Foo, FooVersion, Bar, Baz, BazVersion
+from graphene.test import Client
+from temporal.schema import schema
+from freezegun import freeze_time
 
+FOO_QUERY = """
+                        {
+                          foos {
+                            __typename
+                            id
+                            versions {
+                              __typename
+                              id
+                              validStartDate
+                              validEndDate
+                              sysEndDate
+                              
+                              identity {
+                                __typename
+                                id
+                              }
+                              value
+                            }
+                            bars {
+                              __typename
+                              id
+                              name
+                              baz {
+                                __typename
+                                id
+                                versions {
+                                  __typename
+                                  id
+                                  validStartDate
+                                  validEndDate
+                                  sysEndDate
+                                  
+                                  identity {
+                                    __typename
+                                    id
+                                  }
+                                  value
+                                }
+                              }
+                            }
+                          }
+                        }
+            """
 
 # Create your tests here.
 class BitemporalTestCase(TestCase):
@@ -96,8 +142,8 @@ class BitemporalTestCase(TestCase):
 
         # Check initial state and current state using optimized manager (prefetched)
         with self.assertNumQueries(10):
-            foo1_start = Foo.optimized.as_of(mark_start).first()
-            foo1_current = Foo.optimized.current().first()
+            foo1_start = Foo.optimized.as_of(mark_start).all()[0]
+            foo1_current = Foo.optimized.current().all()[0]
 
         with self.assertNumQueries(0):
             self.assertEqual(foo1_start.versions.count(), 3)
@@ -105,3 +151,42 @@ class BitemporalTestCase(TestCase):
         with self.assertNumQueries(0):
             self.assertEqual(foo1_current.versions.count(), 1)
             self.assertEqual(foo1_current.bars.all()[0].baz.all()[0].versions.count(), 2)
+
+        # Test graphql client
+        # This confirms that the backend query is running the minimum number of queries necessary
+        with self.assertNumQueries(5):
+            self.maxDiff = None
+            client = Client(schema=schema)
+            response = client.execute(FOO_QUERY)
+            self.assertDictEqual(response,
+                 {'data': {'foos': [{'__typename': 'Foo',
+                    'id': '1',
+                    'versions': [{'__typename': 'FooVersion',
+                      'id': '5',
+                      'validStartDate': '2021-01-01',
+                      'validEndDate': '9999-12-31',
+                      'sysEndDate': '9999-12-31T23:59:59.999999',
+                      'identity': {'__typename': 'Foo', 'id': '1'},
+                      'value': 0.0}],
+                    'bars': [{'__typename': 'Bar',
+                      'id': '1',
+                      'name': 'foo1_bar1',
+                      'baz': [{'__typename': 'Baz',
+                        'id': '1',
+                        'versions': [{'__typename': 'BazVersion',
+                          'id': '1',
+                          'validStartDate': '2021-01-01',
+                          'validEndDate': '2021-01-02',
+                          'sysEndDate': '9999-12-31T23:59:59.999999',
+                          'identity': {'__typename': 'Baz', 'id': '1'},
+                          'value': 0.0},
+                         {'__typename': 'BazVersion',
+                          'id': '3',
+                          'validStartDate': '2021-01-02',
+                          'validEndDate': '9999-12-31',
+                          'sysEndDate': '9999-12-31T23:59:59.999999',
+                          'identity': {'__typename': 'Baz', 'id': '1'},
+                          'value': 0.0}]}]},
+                     {'__typename': 'Bar', 'id': '2', 'name': 'foo1_bar2', 'baz': []}]},
+                   {'__typename': 'Foo', 'id': '2', 'versions': [], 'bars': []}]}}
+            )

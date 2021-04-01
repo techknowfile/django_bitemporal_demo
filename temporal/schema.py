@@ -1,36 +1,39 @@
 import graphene
 import graphene_django_optimizer as gql_optimizer
 from graphene_django import DjangoObjectType
-from temporal.models import FooVersion as FooVersionModel, FooTimestamp as FooTimestampModel, \
-    Foo as FooModel
+from temporal import models
 import uuid
 
 
 class Foo(DjangoObjectType):
     class Meta:
-        model = FooModel
+        model = models.Foo
 
 
 class FooVersion(DjangoObjectType):
     class Meta:
-        model = FooVersionModel
+        model = models.FooVersion
 
 
-# class FooTimestamp(DjangoObjectType):
-#     class Meta:
-#         model = FooTimestampModel
+class Bar(DjangoObjectType):
+    class Meta:
+        model = models.Bar
 
-#
-# class BitemporalFooVersion(graphene.ObjectType):
-#     id = graphene.ID()
-#     timestamp = graphene.Field(FooTimestamp)
-#     temporals = graphene.List(FooVersion)
+
+class Baz(DjangoObjectType):
+    class Meta:
+        model = models.Baz
+
+
+class BazVersion(DjangoObjectType):
+    class Meta:
+        model = models.BazVersion
 
 
 class Query(graphene.ObjectType):
     hello = graphene.String(default_value="Hi!")
+    # foos = graphene.List(Foo)
     foos = graphene.List(Foo)
-    # bitemporal_foos = graphene.List(BitemporalFooVersion)
 
     # def resolve_bitemporal_foos(root, info):
     #     foo = FooModel.objects.first()
@@ -43,8 +46,14 @@ class Query(graphene.ObjectType):
     #         })
     #     return versions
 
-
     def resolve_foos(root, info):
-        return gql_optimizer.query(FooModel.objects.all(), info)
+        return list(models.Foo.optimized.current())
+
+
+
+
+    # old
+    # def resolve_foos(root, info):
+    #     return gql_optimizer.query(FooModel.objects.all(), info)
 
 schema = graphene.Schema(query=Query)

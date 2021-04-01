@@ -101,6 +101,9 @@ class TemporalModel(models.Model):
     temporal = TemporalManager()
     objects = TemporalManager()
 
+    # def save(self):
+    #     raise Exception("Cannot save temporal model directly.")
+
     def __repr__(self):
         return f"<{self.__class__.__name__} {self.valid_start_date} {self.valid_end_date} {self.value}>"
 
